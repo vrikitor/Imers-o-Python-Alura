@@ -3,12 +3,11 @@ import pandas as pd
 import plotly.express as px
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA ---
-# Aqui definimos que a barra lateral começa fechada ("collapsed")
 st.set_page_config(
     page_title="Dashboard Salários de Dados",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed"  # <--- PARA ESCONDER A ABA
+    initial_sidebar_state="collapsed"
 )
 
 # --- 2. CARREGAMENTO E TRATAMENTO DE DADOS (COM CACHE) ---
@@ -17,6 +16,10 @@ def carregar_dados():
     url = "https://raw.githubusercontent.com/vqrca/dashboard_salarios_dados/refs/heads/main/dados-imersao-final.csv"
     df = pd.read_csv(url)
     
+    # 1. Limpeza de espaços em branco (Isso evita erros de mapeamento)
+    # Converte para string e remove espaços no começo/fim
+    df['residencia_iso3'] = df['residencia_iso3'].astype(str).str.strip()
+
     # --- DICIONÁRIO DE CONTINENTES ---
     mapa_continentes = {
         'US': 'América do Norte', 'CA': 'América do Norte', 'MX': 'América do Norte',
@@ -55,9 +58,12 @@ def carregar_dados():
         'SV': 'América do Norte'
     }
     
-    # Criando a coluna nova automaticamente
-    # Importante: Usei 'residencia_iso3' pois é a coluna de país do funcionário
+    # Criando a coluna nova
     df['continente'] = df['residencia_iso3'].map(mapa_continentes)
+    
+    # 2. Tratamento de Nulos (Crucial para o gráfico não ficar vazio)
+    # Se não achou o continente, coloca "Outro"
+    df['continente'] = df['continente'].fillna('Outro / Desconhecido')
     
     return df
 
@@ -67,7 +73,7 @@ df = carregar_dados()
 st.sidebar.header("🔍 Filtros")
 st.sidebar.markdown("Use os filtros abaixo para refinar a análise.")
 
-# Filtros (com opções ordenadas)
+# Filtros
 anos = st.sidebar.multiselect("Ano", sorted(df['ano'].unique()), default=sorted(df['ano'].unique()))
 senioridade = st.sidebar.multiselect("Senioridade", sorted(df['senioridade'].unique()), default=sorted(df['senioridade'].unique()))
 contrato = st.sidebar.multiselect("Tipo de Contrato", sorted(df['contrato'].unique()), default=sorted(df['contrato'].unique()))
@@ -100,7 +106,7 @@ col1, col2, col3, col4 = st.columns(4)
 col1.metric("Média Salarial", f"${media:,.2f}")
 col2.metric("Maior Salário", f"${maximo:,.2f}")
 col3.metric("Total de Vagas", f"{contagem:,}")
-col4.metric("Cargo + Comum", cargo_top)
+col4.metric("Cargo mais Comum", cargo_top)
 
 st.markdown("---")
 
@@ -108,7 +114,6 @@ st.markdown("---")
 st.subheader("Análises de Mercado")
 col_graf1, col_graf2 = st.columns(2)
 
-# Gráfico 1: Top 10 Cargos
 with col_graf1:
     if not df_filtrado.empty:
         top_cargos = df_filtrado.groupby('cargo')['usd'].mean().nlargest(10).sort_values(ascending=True).reset_index()
@@ -118,7 +123,6 @@ with col_graf1:
     else:
         st.warning("Sem dados.")
 
-# Gráfico 2: Histograma
 with col_graf2:
     if not df_filtrado.empty:
         fig_hist = px.histogram(df_filtrado, x='usd', nbins=30, title="Distribuição dos Salários",
@@ -130,7 +134,6 @@ with col_graf2:
 # --- 7. GRÁFICOS (LINHA 2 - COM AS ABAS) ---
 col_graf3, col_graf4 = st.columns(2)
 
-# Gráfico 3: Trabalho Remoto (Pizza)
 with col_graf3:
     if not df_filtrado.empty:
         remoto = df_filtrado['remoto'].value_counts().reset_index()
@@ -140,40 +143,54 @@ with col_graf3:
     else:
         st.warning("Sem dados.")
 
-# Gráfico 4: MAPA vs CONTINENTE
 with col_graf4:
     st.markdown("##### Geografia dos Salários")
     aba_mapa, aba_continente = st.tabs(["🌎 Mapa Global", "📊 Por Continente (Detalhado)"])
 
-    # Aba 1: O Mapa 
+    # --- ABA 1: O MAPA (Visual Ajustado) ---
     with aba_mapa:
         if not df_filtrado.empty:
-            # Agrupa por país para o mapa
             df_mapa = df_filtrado.groupby('residencia_iso3')['usd'].mean().reset_index()
-            fig_mapa = px.choropleth(df_mapa, locations='residencia_iso3', color='usd',
-                                     color_continuous_scale='Viridis',
-                                     title='Média Global por País', labels={'usd': 'USD'})
-            fig_mapa.update_layout(geo=dict(showframe=False, showcoastlines=False))
+            
+            fig_mapa = px.choropleth(
+                df_mapa,
+                locations='residencia_iso3',
+                color='usd',
+                color_continuous_scale='YlOrRd', # Amarelo -> Vermelho
+                title='Média Global por País',
+                labels={'usd': 'Média (USD)'}
+            )
+            
+            fig_mapa.update_geos(
+                showcountries=True, countrycolor="black", countrywidth=0.5,
+                showland=True, landcolor="white",
+                showframe=False, showcoastlines=False,
+                projection_type='natural earth'
+            )
             st.plotly_chart(fig_mapa, use_container_width=True)
         else:
             st.warning("Sem dados para o mapa.")
 
-    # Aba 2: Seu Gráfico 
+    # --- ABA 2: O SEU GRÁFICO (Dados já limpos na origem) ---
     with aba_continente:
         if not df_filtrado.empty:
-            # Agrupa por Continente e País
+            # Como já tratamos o 'continente' lá no começo, podemos usar direto!
             df_cont = df_filtrado.groupby(['continente', 'residencia_iso3'])['usd'].mean().reset_index()
-            df_cont = df_cont.sort_values(by='usd', ascending=True) # Ordena do maior para o menor
+            df_cont = df_cont.sort_values(by='usd', ascending=True)
 
-            fig_cont = px.bar(df_cont, x='usd', y='residencia_iso3', color='continente', orientation='h',
-                              title='Comparativo: País e Continente',
-                              labels={'usd': 'Média (USD)', 'residencia_iso3': 'País', 'continente': 'Região'},
-                              height=400)
-            st.plotly_chart(fig_cont, use_container_width=True)
+            if not df_cont.empty:
+                fig_cont = px.bar(
+                    df_cont,
+                    x='usd',
+                    y='residencia_iso3',
+                    color='continente',
+                    orientation='h',
+                    title='Comparativo: País e Continente',
+                    labels={'usd': 'Média (USD)', 'residencia_iso3': 'País', 'continente': 'Região'},
+                    height=500
+                )
+                st.plotly_chart(fig_cont, use_container_width=True)
+            else:
+                st.warning("Erro no agrupamento.")
         else:
-            st.warning("Sem dados de continente.")
-
-# --- 8. DADOS BRUTOS ---
-st.markdown("---")
-with st.expander("📂 Ver Base de Dados Completa"):
-    st.dataframe(df_filtrado)
+            st.warning("Sem dados para o gráfico de continentes.")
