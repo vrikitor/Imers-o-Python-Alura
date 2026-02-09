@@ -108,7 +108,7 @@ c1, c2, c3, c4 = st.columns(4)
 c1.metric("Média Salarial", f"${media:,.2f}")
 c2.metric("Maior Salário", f"${maximo:,.2f}")
 c3.metric("Total de Vagas", f"{contagem:,}")
-c4.metric("Cargo + Comum", cargo_top)
+c4.metric("Cargo mais Comum", cargo_top)
 
 st.markdown("---")
 
@@ -124,7 +124,7 @@ with col2:
         fig = px.histogram(df_filtrado, x='usd', nbins=30, title="Distribuição Salarial", labels={'usd':'USD'})
         st.plotly_chart(fig, use_container_width=True)
 
-# --- 7. GRÁFICOS AVANÇADOS (COM SUAS ALTERAÇÕES) ---
+# --- 7. GRÁFICOS AVANÇADOS ---
 col3, col4 = st.columns(2)
 
 with col3:
@@ -159,7 +159,7 @@ with col4:
             )
             st.plotly_chart(fig_mapa, use_container_width=True)
 
-    # --- ABA 2: SEU GRÁFICO (Colorido por Continente) ---
+    # --- ABA 2: MEU GRÁFICO (Colorido por Continente) ---
     with aba_continente:
         if not df_filtrado.empty:
             df_cont = df_filtrado.groupby(['continente', 'residencia_iso3'])['usd'].mean().reset_index()
@@ -180,3 +180,4 @@ with col4:
                 st.plotly_chart(fig_cont, use_container_width=True)
             else:
                 st.warning("Sem dados agrupados.")
+
